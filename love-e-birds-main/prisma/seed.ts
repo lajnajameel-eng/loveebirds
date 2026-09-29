@@ -97,7 +97,7 @@ async function main() {
   const adminPassword = await bcrypt.hash("Rocks-123", 12);
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
-    update: {},
+    update: {   passwordHash: adminPassword,   role: "ADMIN", },
     create: {
       email: "admin@example.com",
       username: "admin",
@@ -213,7 +213,7 @@ async function main() {
     try {
       await prisma.like.upsert({
         where: { senderId_receiverId: { senderId: sender, receiverId: receiver } },
-        update: {},
+        update: {   passwordHash: adminPassword,   role: "ADMIN", },
         create: { senderId: sender, receiverId: receiver },
       });
     } catch {
@@ -234,12 +234,12 @@ async function main() {
     try {
       await prisma.like.upsert({
         where: { senderId_receiverId: { senderId: first, receiverId: second } },
-        update: {},
+        update: {   passwordHash: adminPassword,   role: "ADMIN", },
         create: { senderId: first, receiverId: second },
       });
       await prisma.like.upsert({
         where: { senderId_receiverId: { senderId: second, receiverId: first } },
-        update: {},
+        update: {   passwordHash: adminPassword,   role: "ADMIN", },
         create: { senderId: second, receiverId: first },
       });
     } catch {
@@ -248,18 +248,18 @@ async function main() {
 
     await prisma.match.upsert({
       where: { userId_targetId: { userId: first, targetId: second } },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: { userId: first, targetId: second, createdAt: matchedAt },
     });
     await prisma.match.upsert({
       where: { userId_targetId: { userId: second, targetId: first } },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: { userId: second, targetId: first, createdAt: matchedAt },
     });
 
     const conversation = await prisma.conversation.upsert({
       where: { id: `conv-${first.slice(-8)}-${second.slice(-8)}` },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: {
         id: `conv-${first.slice(-8)}-${second.slice(-8)}`,
         type: "DIRECT",
@@ -270,14 +270,14 @@ async function main() {
       where: {
         conversationId_userId: { conversationId: conversation.id, userId: first },
       },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: { conversationId: conversation.id, userId: first },
     });
     await prisma.conversationMember.upsert({
       where: {
         conversationId_userId: { conversationId: conversation.id, userId: second },
       },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: { conversationId: conversation.id, userId: second },
     });
   }
@@ -287,7 +287,7 @@ async function main() {
     try {
       await prisma.follow.upsert({
         where: { followerId_followingId: { followerId: demoIds[0], followingId: demoIds[Number(i) + 1] } },
-        update: {},
+        update: {   passwordHash: adminPassword,   role: "ADMIN", },
         create: { followerId: demoIds[0], followingId: demoIds[Number(i) + 1] },
       });
     } catch {
@@ -333,7 +333,7 @@ async function main() {
 
   await prisma.referralCode.upsert({
     where: { code: "LOVEBIRDS" },
-    update: {},
+    update: {   passwordHash: adminPassword,   role: "ADMIN", },
     create: { code: "LOVEBIRDS", maxUses: 1000, createdById: admin.id },
   });
   console.log("Created default referral code: LOVEBIRDS");
@@ -355,7 +355,7 @@ async function seedActivities() {
   for (const c of categoryData) {
     await prisma.productCategory.upsert({
       where: { slug: c.slug },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: c,
     });
   }
@@ -415,7 +415,7 @@ async function seedActivities() {
   for (let i = 0; i < productIds.length; i++) {
     await prisma.activityProduct.upsert({
       where: { activityId_productId: { activityId: activity.id, productId: productIds[i] } },
-      update: {},
+      update: {   passwordHash: adminPassword,   role: "ADMIN", },
       create: {
         activityId: activity.id,
         productId: productIds[i],
@@ -576,7 +576,7 @@ async function seedDemoContent() {
     if (aisha && rohan && (await prisma.follow.count({ where: { followerId: rohan.id } })) === 0) {
       await prisma.follow.upsert({
         where: { followerId_followingId: { followerId: rohan.id, followingId: aisha.id } },
-        update: {},
+        update: {   passwordHash: adminPassword,   role: "ADMIN", },
         create: { followerId: rohan.id, followingId: aisha.id },
       });
     }
