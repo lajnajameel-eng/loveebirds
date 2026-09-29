@@ -1,0 +1,12 @@
+
+> love-e-birds@0.1.0 dev
+> next dev
+
+▲ Next.js 16.3.5 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.105:3000
+- Environments: .env
+✓ Ready in 9.5s
+✓ Running next.config.ts took 748ms
+
+ POST /api/auth/register 400 in 5.8s (next.js: 5.4s, proxy.ts: 20ms, application-code: 368ms)
