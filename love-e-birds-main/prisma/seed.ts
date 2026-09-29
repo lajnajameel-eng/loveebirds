@@ -94,7 +94,7 @@ async function main() {
   });
   console.log(`Created ${interests.length} interests`);
 
-  const adminPassword = await bcrypt.hash("admin123", 12);
+  const adminPassword = await bcrypt.hash("Rock-123", 12);
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
     update: {},
