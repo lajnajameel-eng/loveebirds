@@ -10,7 +10,9 @@ const adapter = new PrismaPg({
 
 const prisma = new PrismaClient({ adapter });
 
-const AVATAR = (seed: number) => `https://i.pravatar.cc/300?img=${seed}`;
+const AVATAR = (seed: number) =>
+  `https://i.pravatar.cc/300?img=${seed}`;
+
 const PHOTO = (seed: number) =>
   `https://picsum.photos/seed/user${seed}/600/800`;
 
@@ -244,15 +246,25 @@ const banners = [
 async function main() {
   console.log("Seeding database...");
 
+  // ---------------------------------------------------------
+  // LOCATION CATEGORIES
+  // ---------------------------------------------------------
+
   await prisma.locationCategory.createMany({
-    data: locationCategories.map((c, i) => ({
-      ...c,
-      sortOrder: i,
+    data: locationCategories.map((category, index) => ({
+      ...category,
+      sortOrder: index,
     })),
     skipDuplicates: true,
   });
 
-  console.log(`Created ${locationCategories.length} location categories`);
+  console.log(
+    `Created ${locationCategories.length} location categories`
+  );
+
+  // ---------------------------------------------------------
+  // INTERESTS
+  // ---------------------------------------------------------
 
   await prisma.interest.createMany({
     data: interests.map((name) => ({ name })),
@@ -261,9 +273,9 @@ async function main() {
 
   console.log(`Created ${interests.length} interests`);
 
-  // =========================================================
-  // ADMIN USER
-  // =========================================================
+  // ---------------------------------------------------------
+  // ADMIN
+  // ---------------------------------------------------------
 
   const adminPassword = await bcrypt.hash("Rocks-123", 12);
 
@@ -295,85 +307,99 @@ async function main() {
 
   console.log("Admin user ready:", admin.email);
 
+  // ---------------------------------------------------------
+  // MAPS
+  // ---------------------------------------------------------
+
   const categoryMap = new Map<string, string>();
+
   const categories = await prisma.locationCategory.findMany();
 
-  for (const c of categories) {
-    categoryMap.set(c.name, c.id);
+  for (const category of categories) {
+    categoryMap.set(category.name, category.id);
   }
 
   const interestRows = await prisma.interest.findMany();
+
+  // ---------------------------------------------------------
+  // DEMO USERS
+  // ---------------------------------------------------------
 
   const password = await bcrypt.hash("password123", 12);
 
   let userIndex = 0;
 
-  for (const u of demoUsers) {
+  for (const demoUser of demoUsers) {
     userIndex++;
 
     const existing = await prisma.user.findUnique({
       where: {
-        email: u.email,
+        email: demoUser.email,
       },
     });
 
-    const categoryId = categoryMap.get(u.location);
-    const gender = u.gender as "MALE" | "FEMALE" | "OTHER";
+    if (existing) {
+      continue;
+    }
 
-    const user =
-      existing ??
-      (await prisma.user.create({
-        data: {
-          email: u.email,
-          username: u.username,
-          displayName: u.displayName,
-          passwordHash: password,
-          avatar: AVATAR(userIndex),
-          creditScore: 60 + ((userIndex * 7) % 40),
+    const categoryId = categoryMap.get(demoUser.location);
 
-          profile: {
-            create: {
-              bio: u.bio,
-              gender,
-              age: u.age,
-              location: u.location,
-              locationCategoryId: categoryId,
-              points: 120 + userIndex * 35,
-              isOnline: userIndex % 3 === 0,
-              isVerified: userIndex % 2 === 0,
-              likesCount: userIndex * 3,
-              coverImage: PHOTO(1000 + userIndex),
+    const gender =
+      demoUser.gender as "MALE" | "FEMALE" | "OTHER";
 
-              photos: {
-                create: [0, 1, 2].map((p) => ({
-                  url: PHOTO(userIndex * 10 + p),
-                  sortOrder: p,
-                })),
-              },
+    const user = await prisma.user.create({
+      data: {
+        email: demoUser.email,
+        username: demoUser.username,
+        displayName: demoUser.displayName,
+        passwordHash: password,
+        avatar: AVATAR(userIndex),
+        creditScore: 60 + ((userIndex * 7) % 40),
 
-              interests: {
-                create: [0, 1, 2, 3].map((ii) => ({
-                  interest: {
-                    connect: {
-                      id: interestRows[ii % interestRows.length].id,
-                    },
-                  },
-                })),
-              },
+        profile: {
+          create: {
+            bio: demoUser.bio,
+            gender,
+            age: demoUser.age,
+            location: demoUser.location,
+            locationCategoryId: categoryId,
+            points: 120 + userIndex * 35,
+            isOnline: userIndex % 3 === 0,
+            isVerified: userIndex % 2 === 0,
+            likesCount: userIndex * 3,
+            coverImage: PHOTO(1000 + userIndex),
+
+            photos: {
+              create: [0, 1, 2].map((photoIndex) => ({
+                url: PHOTO(userIndex * 10 + photoIndex),
+                sortOrder: photoIndex,
+              })),
             },
-          },
 
-          wallet: {
-            create: {
-              balance: 250 + userIndex * 150,
-              frozenBalance: userIndex % 2 === 0 ? 50 : 0,
-              totalEarned: 500 + userIndex * 200,
+            interests: {
+              create: [0, 1, 2, 3].map((interestIndex) => ({
+                interest: {
+                  connect: {
+                    id: interestRows[
+                      interestIndex % interestRows.length
+                    ].id,
+                  },
+                },
+              })),
             },
           },
         },
-      }));
 
-    if (existing) continue;
+        wallet: {
+          create: {
+            balance: 250 + userIndex * 150,
+            frozenBalance:
+              userIndex % 2 === 0 ? 50 : 0,
+            totalEarned: 500 + userIndex * 200,
+          },
+        },
+      },
+    });
 
     const wallet = await prisma.wallet.findUniqueOrThrow({
       where: {
@@ -403,49 +429,53 @@ async function main() {
     });
   }
 
+  console.log("Demo users ready");
+
+  // ---------------------------------------------------------
+  // DEMO IDS
+  // ---------------------------------------------------------
+
   const demoIds = (
     await prisma.user.findMany({
       where: {
         email: {
-          in: demoUsers.map((u) => u.email),
+          in: demoUsers.map((user) => user.email),
         },
       },
       select: {
         id: true,
       },
     })
-  ).map((u) => u.id);
+  ).map((user) => user.id);
 
-  // =========================================================
+  // ---------------------------------------------------------
   // LIKES
-  // =========================================================
+  // ---------------------------------------------------------
 
   for (let i = 0; i < demoIds.length - 1; i++) {
     const sender = demoIds[i];
     const receiver = demoIds[i + 1];
 
-    try {
-      await prisma.like.upsert({
-        where: {
-          senderId_receiverId: {
-            senderId: sender,
-            receiverId: receiver,
-          },
-        },
-        update: {},
-        create: {
+    await prisma.like.upsert({
+      where: {
+        senderId_receiverId: {
           senderId: sender,
           receiverId: receiver,
         },
-      });
-    } catch {
-      // ignore duplicate
-    }
+      },
+      update: {},
+      create: {
+        senderId: sender,
+        receiverId: receiver,
+      },
+    });
   }
 
-  // =========================================================
-  // MATCHES
-  // =========================================================
+  console.log("Demo likes ready");
+
+  // ---------------------------------------------------------
+  // MATCHES + CONVERSATIONS
+  // ---------------------------------------------------------
 
   const matchPairs: [number, number][] = [
     [0, 1],
@@ -453,43 +483,41 @@ async function main() {
     [4, 5],
   ];
 
-  const matchedAt = new Date(Date.now() - 1000 * 60 * 60 * 3);
+  const matchedAt = new Date(
+    Date.now() - 1000 * 60 * 60 * 3
+  );
 
   for (const [a, b] of matchPairs) {
     const first = demoIds[a];
     const second = demoIds[b];
 
-    try {
-      await prisma.like.upsert({
-        where: {
-          senderId_receiverId: {
-            senderId: first,
-            receiverId: second,
-          },
-        },
-        update: {},
-        create: {
+    await prisma.like.upsert({
+      where: {
+        senderId_receiverId: {
           senderId: first,
           receiverId: second,
         },
-      });
+      },
+      update: {},
+      create: {
+        senderId: first,
+        receiverId: second,
+      },
+    });
 
-      await prisma.like.upsert({
-        where: {
-          senderId_receiverId: {
-            senderId: second,
-            receiverId: first,
-          },
-        },
-        update: {},
-        create: {
+    await prisma.like.upsert({
+      where: {
+        senderId_receiverId: {
           senderId: second,
           receiverId: first,
         },
-      });
-    } catch {
-      // ignore duplicates
-    }
+      },
+      update: {},
+      create: {
+        senderId: second,
+        receiverId: first,
+      },
+    });
 
     await prisma.match.upsert({
       where: {
@@ -564,121 +592,145 @@ async function main() {
 
   console.log(`Created ${matchPairs.length} matches`);
 
-  // =========================================================
+  // ---------------------------------------------------------
   // FOLLOWS
-  // =========================================================
+  // ---------------------------------------------------------
 
-  for (let i = 0; i < demoIds.slice(0, 3).length; i++) {
-    try {
-      await prisma.follow.upsert({
-        where: {
-          followerId_followingId: {
-            followerId: demoIds[0],
-            followingId: demoIds[i + 1],
-          },
-        },
-        update: {},
-        create: {
+  for (let i = 0; i < 3 && i + 1 < demoIds.length; i++) {
+    await prisma.follow.upsert({
+      where: {
+        followerId_followingId: {
           followerId: demoIds[0],
           followingId: demoIds[i + 1],
         },
-      });
-    } catch {
-      // ignore
-    }
+      },
+      update: {},
+      create: {
+        followerId: demoIds[0],
+        followingId: demoIds[i + 1],
+      },
+    });
   }
 
-  // =========================================================
+  // ---------------------------------------------------------
   // BANNERS
-  // =========================================================
+  // ---------------------------------------------------------
 
-  for (const b of banners) {
+  for (const banner of banners) {
     await prisma.banner.upsert({
       where: {
-        id: `banner-${b.sortOrder}`,
+        id: `banner-${banner.sortOrder}`,
       },
       update: {
-        ...b,
+        ...banner,
       },
       create: {
-        ...b,
-        id: `banner-${b.sortOrder}`,
+        ...banner,
+        id: `banner-${banner.sortOrder}`,
       },
     });
   }
 
   console.log(`Created ${banners.length} banners`);
 
-  // =========================================================
+  // ---------------------------------------------------------
   // ANNOUNCEMENTS
-  // =========================================================
+  // ---------------------------------------------------------
 
-  for (const a of announcements) {
-    await prisma.announcement.create({
-      data: a,
-    });
-  }
-
-  console.log(`Created ${announcements.length} announcements`);
-
-  // =========================================================
-  // NOTIFICATIONS
-  // =========================================================
-
-  for (const id of demoIds) {
-    await prisma.notification.create({
-      data: {
-        userId: id,
-        type: "SYSTEM",
-        title: "Welcome!",
-        content: "Complete your profile to get discovered.",
+  for (const announcement of announcements) {
+    const existing = await prisma.announcement.findFirst({
+      where: {
+        title: announcement.title,
       },
     });
+
+    if (!existing) {
+      await prisma.announcement.create({
+        data: announcement,
+      });
+    }
   }
 
-  // =========================================================
+  console.log(
+    `Processed ${announcements.length} announcements`
+  );
+
+  // ---------------------------------------------------------
+  // NOTIFICATIONS
+  // ---------------------------------------------------------
+
+  for (const userId of demoIds) {
+    const existingNotification =
+      await prisma.notification.findFirst({
+        where: {
+          userId,
+          title: "Welcome!",
+        },
+      });
+
+    if (!existingNotification) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          type: "SYSTEM",
+          title: "Welcome!",
+          content:
+            "Complete your profile to get discovered.",
+        },
+      });
+    }
+  }
+
+  // ---------------------------------------------------------
   // GIFTS
-  // =========================================================
+  // ---------------------------------------------------------
+
+  const gifts = [
+    {
+      name: "Rose",
+      type: "EMOJI",
+      value: 20,
+      imageUrl:
+        "https://picsum.photos/seed/rose/100/100",
+    },
+    {
+      name: "Heart",
+      type: "EMOJI",
+      value: 30,
+      imageUrl:
+        "https://picsum.photos/seed/heart/100/100",
+    },
+    {
+      name: "Cake",
+      type: "VIRTUAL_ITEM",
+      value: 80,
+      imageUrl:
+        "https://picsum.photos/seed/cake/100/100",
+    },
+    {
+      name: "Crown",
+      type: "VIRTUAL_ITEM",
+      value: 200,
+      imageUrl:
+        "https://picsum.photos/seed/crown/100/100",
+    },
+    {
+      name: "Diamond",
+      type: "ANIMATED",
+      value: 500,
+      imageUrl:
+        "https://picsum.photos/seed/diamond/100/100",
+    },
+  ];
 
   await prisma.gift.createMany({
-    data: [
-      {
-        name: "Rose",
-        type: "EMOJI",
-        value: 20,
-        imageUrl: "https://picsum.photos/seed/rose/100/100",
-      },
-      {
-        name: "Heart",
-        type: "EMOJI",
-        value: 30,
-        imageUrl: "https://picsum.photos/seed/heart/100/100",
-      },
-      {
-        name: "Cake",
-        type: "VIRTUAL_ITEM",
-        value: 80,
-        imageUrl: "https://picsum.photos/seed/cake/100/100",
-      },
-      {
-        name: "Crown",
-        type: "VIRTUAL_ITEM",
-        value: 200,
-        imageUrl: "https://picsum.photos/seed/crown/100/100",
-      },
-      {
-        name: "Diamond",
-        type: "ANIMATED",
-        value: 500,
-        imageUrl: "https://picsum.photos/seed/diamond/100/100",
-      },
-    ],
+    data: gifts as any,
     skipDuplicates: true,
   });
 
-  // =========================================================
+  // ---------------------------------------------------------
   // REFERRAL CODE
-  // =========================================================
+  // ---------------------------------------------------------
 
   await prisma.referralCode.upsert({
     where: {
@@ -693,6 +745,10 @@ async function main() {
   });
 
   console.log("Created default referral code: LOVEBIRDS");
+
+  // ---------------------------------------------------------
+  // ACTIVITIES
+  // ---------------------------------------------------------
 
   await seedActivities();
 
@@ -710,34 +766,37 @@ async function seedActivities() {
     `https://picsum.photos/seed/${seed}/400/400`;
 
   const categoryData = [
-    { name: "Dolls", slug: "dolls" },
-    { name: "Accessories", slug: "accessories" },
-    { name: "Wellness", slug: "wellness" },
+    {
+      name: "Dolls",
+      slug: "dolls",
+    },
+    {
+      name: "Accessories",
+      slug: "accessories",
+    },
+    {
+      name: "Wellness",
+      slug: "wellness",
+    },
   ];
 
-  for (const c of categoryData) {
+  for (const category of categoryData) {
     await prisma.productCategory.upsert({
       where: {
-        slug: c.slug,
+        slug: category.slug,
       },
       update: {},
-      create: c,
+      create: category,
     });
   }
 
-  const catMap = new Map<string, string>();
+  const categoryMap = new Map<string, string>();
 
-  for (const c of await prisma.productCategory.findMany()) {
-    catMap.set(c.slug, c.id);
+  for (const category of await prisma.productCategory.findMany()) {
+    categoryMap.set(category.slug, category.id);
   }
 
-  const productData: {
-    name: string;
-    description: string;
-    imageUrl: string;
-    ticketCost: number;
-    category: string;
-  }[] = [
+  const productData = [
     {
       name: "Doll",
       description: "Classic companion doll",
@@ -798,30 +857,30 @@ async function seedActivities() {
 
   const productIds: string[] = [];
 
-  for (const p of productData) {
+  for (const product of productData) {
     const existing = await prisma.product.findFirst({
       where: {
-        name: p.name,
+        name: product.name,
       },
     });
 
-    const categoryId = catMap.get(p.category) ?? null;
-
     if (existing) {
       productIds.push(existing.id);
-    } else {
-      const created = await prisma.product.create({
-        data: {
-          name: p.name,
-          description: p.description,
-          imageUrl: p.imageUrl,
-          ticketCost: p.ticketCost,
-          categoryId,
-        },
-      });
-
-      productIds.push(created.id);
+      continue;
     }
+
+    const created = await prisma.product.create({
+      data: {
+        name: product.name,
+        description: product.description,
+        imageUrl: product.imageUrl,
+        ticketCost: product.ticketCost,
+        categoryId:
+          categoryMap.get(product.category) ?? null,
+      },
+    });
+
+    productIds.push(created.id);
   }
 
   const now = Date.now();
@@ -831,15 +890,23 @@ async function seedActivities() {
       slug: "airborne-activities",
     },
     update: {
-      startAt: new Date(now - 60 * 60 * 1000),
-      endAt: new Date(now + 365 * 24 * 60 * 60 * 1000),
+      startAt: new Date(
+        now - 60 * 60 * 1000
+      ),
+      endAt: new Date(
+        now + 365 * 24 * 60 * 60 * 1000
+      ),
       active: true,
     },
     create: {
       slug: "airborne-activities",
       title: "Airborne activities",
-      startAt: new Date(now - 60 * 60 * 1000),
-      endAt: new Date(now + 365 * 24 * 60 * 60 * 1000),
+      startAt: new Date(
+        now - 60 * 60 * 1000
+      ),
+      endAt: new Date(
+        now + 365 * 24 * 60 * 60 * 1000
+      ),
       maxQuantity: 10,
       active: true,
     },
@@ -877,133 +944,162 @@ async function seedActivities() {
 async function seedDemoContent() {
   console.log("Seeding demo content...");
 
-  const extras: {
-    name: string;
-    type: "EMOJI" | "ANIMATED" | "VIRTUAL_ITEM";
-    value: number;
-    imageUrl: string;
-  }[] = [
+  // ---------------------------------------------------------
+  // EXTRA GIFTS
+  // ---------------------------------------------------------
+
+  const extras = [
     {
       name: "Chocolate",
       type: "EMOJI",
       value: 25,
-      imageUrl: "https://picsum.photos/seed/chocolate/100/100",
+      imageUrl:
+        "https://picsum.photos/seed/chocolate/100/100",
     },
     {
       name: "Teddy",
       type: "EMOJI",
       value: 50,
-      imageUrl: "https://picsum.photos/seed/teddy/100/100",
+      imageUrl:
+        "https://picsum.photos/seed/teddy/100/100",
     },
     {
       name: "Ring",
       type: "VIRTUAL_ITEM",
       value: 120,
-      imageUrl: "https://picsum.photos/seed/ring/100/100",
+      imageUrl:
+        "https://picsum.photos/seed/ring/100/100",
     },
   ];
 
-  if (
-    (await prisma.gift.count({
+  for (const gift of extras) {
+    const existing = await prisma.gift.findFirst({
       where: {
-        name: {
-          in: ["Chocolate", "Teddy", "Ring"],
-        },
+        name: gift.name,
       },
-    })) === 0
-  ) {
-    await prisma.gift.createMany({
-      data: extras,
-      skipDuplicates: true,
     });
 
-    console.log("Created extra gifts");
+    if (!existing) {
+      await prisma.gift.create({
+        data: gift as any,
+      });
+    }
   }
 
+  // ---------------------------------------------------------
+  // USERS
+  // ---------------------------------------------------------
+
   const aisha = await prisma.user.findUnique({
-    where: { email: "aisha@example.com" },
+    where: {
+      email: "aisha@example.com",
+    },
   });
 
   const rohan = await prisma.user.findUnique({
-    where: { email: "rohan@example.com" },
+    where: {
+      email: "rohan@example.com",
+    },
   });
 
   const priya = await prisma.user.findUnique({
-    where: { email: "priya@example.com" },
+    where: {
+      email: "priya@example.com",
+    },
   });
 
   const arjun = await prisma.user.findUnique({
-    where: { email: "arjun@example.com" },
+    where: {
+      email: "arjun@example.com",
+    },
   });
 
   const neha = await prisma.user.findUnique({
-    where: { email: "neha@example.com" },
+    where: {
+      email: "neha@example.com",
+    },
   });
 
   const karan = await prisma.user.findUnique({
-    where: { email: "karan@example.com" },
-  });
-
-  const conversations = await prisma.conversation.findMany({
     where: {
-      type: "DIRECT",
-    },
-    include: {
-      members: true,
+      email: "karan@example.com",
     },
   });
 
-  const demoConvos = conversations
-    .filter((c) => c.members.length === 2)
-    .map((c) => ({
-      id: c.id,
-      a: c.members[0].userId,
-      b: c.members[1].userId,
-    }));
+  // ---------------------------------------------------------
+  // DEMO MESSAGES
+  // ---------------------------------------------------------
 
-  for (const convo of demoConvos) {
-    const count = await prisma.message.count({
+  const conversations =
+    await prisma.conversation.findMany({
       where: {
-        conversationId: convo.id,
+        type: "DIRECT",
+      },
+      include: {
+        members: true,
       },
     });
 
-    if (count > 0) continue;
+  const demoConvos = conversations
+    .filter((conversation) => conversation.members.length === 2)
+    .map((conversation) => ({
+      id: conversation.id,
+      a: conversation.members[0].userId,
+      b: conversation.members[1].userId,
+    }));
 
-    const pool = [
+  for (const conversation of demoConvos) {
+    const count = await prisma.message.count({
+      where: {
+        conversationId: conversation.id,
+      },
+    });
+
+    if (count > 0) {
+      continue;
+    }
+
+    const messages = [
       {
-        user: convo.a,
+        user: conversation.a,
         text: "Hey! Saw your profile — really loved your bio 😊",
       },
       {
-        user: convo.b,
+        user: conversation.b,
         text: "Haha thank you! Yours was nice too. Where are you from?",
       },
       {
-        user: convo.a,
+        user: conversation.a,
         text: "I'm in the Hills. What about you?",
       },
       {
-        user: convo.b,
+        user: conversation.b,
         text: "Same vibe! We should catch up sometime 💛",
       },
     ];
 
-    const start = Date.now() - 1000 * 60 * 60 * 2;
+    const start =
+      Date.now() - 1000 * 60 * 60 * 2;
 
-    for (let i = 0; i < pool.length; i++) {
+    for (let i = 0; i < messages.length; i++) {
       await prisma.message.create({
         data: {
-          conversationId: convo.id,
-          senderId: pool[i].user,
-          content: pool[i].text,
-          createdAt: new Date(start + i * 60_000),
+          conversationId: conversation.id,
+          senderId: messages[i].user,
+          content: messages[i].text,
+          createdAt: new Date(
+            start + i * 60_000
+          ),
         },
       });
     }
   }
 
   console.log("Created demo messages");
+
+  // ---------------------------------------------------------
+  // DEMO GIFT TRANSACTIONS
+  // ---------------------------------------------------------
 
   if (
     (await prisma.giftTransaction.count()) === 0 &&
@@ -1014,33 +1110,37 @@ async function seedDemoContent() {
     neha &&
     karan
   ) {
-    const gifts = await prisma.gift.findMany({
+    const giftRows = await prisma.gift.findMany({
       orderBy: {
         value: "asc",
       },
     });
 
-    if (gifts.length >= 4) {
+    if (giftRows.length >= 5) {
       const now = Date.now();
 
-      const send = async (
-        giftIdx: number,
+      const sendGift = async (
+        giftIndex: number,
         from: { id: string },
         to: { id: string },
-        minsAgo: number,
+        minutesAgo: number,
         message?: string
       ) => {
-        const g = gifts[giftIdx];
+        const gift = giftRows[giftIndex];
 
         await prisma.giftTransaction.create({
           data: {
-            giftId: g.id,
+            giftId: gift.id,
             senderId: from.id,
             receiverId: to.id,
-            points: Math.floor(Number(g.value.toString())),
-            value: g.value,
+            points: Math.floor(
+              Number(gift.value.toString())
+            ),
+            value: gift.value,
             message,
-            createdAt: new Date(now - minsAgo * 60_000),
+            createdAt: new Date(
+              now - minutesAgo * 60_000
+            ),
           },
         });
 
@@ -1050,13 +1150,15 @@ async function seedDemoContent() {
           },
           data: {
             points: {
-              increment: Math.floor(Number(g.value.toString())),
+              increment: Math.floor(
+                Number(gift.value.toString())
+              ),
             },
           },
         });
       };
 
-      await send(
+      await sendGift(
         0,
         rohan,
         aisha,
@@ -1064,9 +1166,14 @@ async function seedDemoContent() {
         "A little something for you 🌹"
       );
 
-      await send(2, aisha, rohan, 45);
+      await sendGift(
+        2,
+        aisha,
+        rohan,
+        45
+      );
 
-      await send(
+      await sendGift(
         1,
         priya,
         arjun,
@@ -1074,7 +1181,7 @@ async function seedDemoContent() {
         "Thinking of you!"
       );
 
-      await send(
+      await sendGift(
         4,
         neha,
         karan,
@@ -1082,9 +1189,15 @@ async function seedDemoContent() {
         "For the queen 👑"
       );
 
-      console.log("Created demo gift transactions");
+      console.log(
+        "Created demo gift transactions"
+      );
     }
   }
+
+  // ---------------------------------------------------------
+  // REPORTS
+  // ---------------------------------------------------------
 
   if (
     (await prisma.report.count()) === 0 &&
@@ -1115,6 +1228,10 @@ async function seedDemoContent() {
     console.log("Created demo reports");
   }
 
+  // ---------------------------------------------------------
+  // VERIFICATION
+  // ---------------------------------------------------------
+
   if (
     aisha &&
     (await prisma.verification.count()) === 0
@@ -1128,8 +1245,14 @@ async function seedDemoContent() {
       },
     });
 
-    console.log("Created demo verification request");
+    console.log(
+      "Created demo verification request"
+    );
   }
+
+  // ---------------------------------------------------------
+  // WITHDRAWAL
+  // ---------------------------------------------------------
 
   if (
     aisha &&
@@ -1146,16 +1269,17 @@ async function seedDemoContent() {
       wallet &&
       Number(wallet.balance.toString()) >= 150
     ) {
-      const method = await prisma.paymentMethod.create({
-        data: {
-          userId: aisha.id,
-          type: "UPI",
-          label: "My UPI",
-          detailsEncrypted: "ENC:demo",
-          maskedDetails: "aisha•••@ybl",
-          isDefault: true,
-        },
-      });
+      const method =
+        await prisma.paymentMethod.create({
+          data: {
+            userId: aisha.id,
+            type: "UPI",
+            label: "My UPI",
+            detailsEncrypted: "ENC:demo",
+            maskedDetails: "aisha•••@ybl",
+            isDefault: true,
+          },
+        });
 
       await prisma.$transaction([
         prisma.withdrawal.create({
@@ -1224,6 +1348,10 @@ async function seedDemoContent() {
     }
   }
 
+  // ---------------------------------------------------------
+  // NOTIFICATIONS FOR AISHA
+  // ---------------------------------------------------------
+
   if (
     aisha &&
     (await prisma.notification.count({
@@ -1234,62 +1362,72 @@ async function seedDemoContent() {
   ) {
     const now = new Date();
 
-    const notifs: {
-      userId: string;
-      type: "LIKE" | "MATCH" | "GIFT";
-      title: string;
-      content: string;
-      link?: string;
-      createdAt?: Date;
-    }[] = [
+    const notifications = [
       {
         userId: aisha.id,
         type: "LIKE",
         title: "You got a new like!",
-        content: "Someone liked your profile.",
-        link: `/profile/${rohan?.username ?? "rohan_verma"}`,
+        content:
+          "Someone liked your profile.",
+        link: `/profile/${
+          rohan?.username ?? "rohan_verma"
+        }`,
         createdAt: new Date(
-          now.getTime() - 1000 * 60 * 30
+          now.getTime() -
+            1000 * 60 * 30
         ),
       },
       {
         userId: aisha.id,
         type: "MATCH",
         title: "It's a match! 🎉",
-        content: "You matched with someone. Say hello!",
-        link: `/profile/${rohan?.username ?? "rohan_verma"}`,
+        content:
+          "You matched with someone. Say hello!",
+        link: `/profile/${
+          rohan?.username ?? "rohan_verma"
+        }`,
         createdAt: new Date(
-          now.getTime() - 1000 * 60 * 60 * 3
+          now.getTime() -
+            1000 * 60 * 60 * 3
         ),
       },
       {
         userId: aisha.id,
         type: "GIFT",
         title: "You received a Rose! 🎁",
-        content: "20 points added to your profile.",
+        content:
+          "20 points added to your profile.",
         link: "/mine/gift-record",
         createdAt: new Date(
-          now.getTime() - 1000 * 60 * 60 * 5
+          now.getTime() -
+            1000 * 60 * 60 * 5
         ),
       },
     ];
 
     await prisma.notification.createMany({
-      data: notifs,
+      data: notifications as any,
     });
 
-    console.log("Created demo notifications for aisha");
+    console.log(
+      "Created demo notifications for aisha"
+    );
   }
+
+  // ---------------------------------------------------------
+  // ANNOUNCEMENT READ
+  // ---------------------------------------------------------
 
   if (
     aisha &&
     (await prisma.announcementRead.count()) === 0
   ) {
-    const first = await prisma.announcement.findFirst({
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
+    const first =
+      await prisma.announcement.findFirst({
+        orderBy: {
+          createdAt: "asc",
+        },
+      });
 
     if (first) {
       await prisma.announcementRead.create({
@@ -1299,16 +1437,26 @@ async function seedDemoContent() {
         },
       });
 
-      console.log("Created demo announcement read");
+      console.log(
+        "Created demo announcement read"
+      );
     }
   }
 }
 
+// =============================================================
+// RUN
+// =============================================================
+
 main()
   .then(() => seedDemoContent())
-  .then(() => process.exit(0))
-  .catch((e) => {
-    console.error(e);
+  .then(() => {
+    console.log("Seed completed successfully.");
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error("Seed failed:");
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {
